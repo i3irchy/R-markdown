@@ -1,0 +1,136 @@
+```{r, echo=FALSE, message=FALSE}
+load("~/Personal Work/Coursera/variables.Rdata")
+library(caret)
+library(ggplot2)
+library(randomForest)
+
+```
+
+---
+title: "Practical Machine Learning Assignment"
+author: "Matthew Birch"
+date: "23 August 2015"
+output: html_document
+---
+
+### Objective
+
+The objective of the assignemnt was to create a model to correctly identify the manner in which 6 test subjects completed dumbell lifts, by classifying the activity into one of 6 classes (1 correct class, and 5 distinct classes for common mistakes). 
+
+
+### Initial variable inspection
+
+Training data comprised 19,622 observations of 158 predictor variables, as well as the class variable. Before any data exploration, the training data provided were split into a training and testing set, at ratio of 0.75:0.25. **Data exploration was then limited to the training subset only**.
+
+```{r, eval=FALSE}
+#load training data
+pml.training <- read.csv("~/Personal Work/Coursera/pml-training.csv",row.names=1)
+#determine variable classes of training data
+classes<-sapply(pml.training,class)
+#load testing data ensuring same variable structure as training set
+pml.testing <- read.csv("~/Personal Work/Coursera/pml-testing.csv",row.names=1,colClasses = classes)
+
+# set seed for reproducability
+set.seed(23687)
+# split traing data into training and testing subsets
+inTrain = createDataPartition(pml.training$classe, p = 0.75, list=FALSE)
+training = pml.training[ inTrain,]
+testing = pml.training[-inTrain,]
+
+```
+
+Viewing a summary of the predictor variables highlights that a large number of variables include blank entries, and NA values. Further, the variable names of many of these such predictors suggests that the would-be values are summary statistics based on other predictor variables (e.g. averages, maximums, kurtosis, skews etc). 
+
+Removing those predictor variables with majority NAs and blanks results in a reduction of predictor variables from 158 to 58 listed below:
+
+```{r}
+# identify variables with multiple blank entries
+ls <- apply(training,2,function(x) sum((x=="")))
+# create a list of variables with non-blank, non-NA entries
+vars_full <- c(names(subset(ls, ls == 0)))
+# remove class variables from list
+vars_full <- vars_full[c(-59)]
+
+print(vars_full)
+```
+Given non-numeric nature of 'cvtd\_ timestamp' this variable is also removed from consideration and is assumed to have been generated as a combination of one or both of the 'raw_time...' variables.
+
+Given the size of the data and possible number of permuations of variables, instead of identifying linear dependency or correlation between predictors it was instead decided to make use of a non-linear machine learning algorithm (random forests) and rather use feaure importance as a feature selection method.
+
+### Initial training and predictor selection
+
+Initial model training was conducted using all 57 of the predictors identified above (after removal of cvtd\_ timestamp). The method used was a Random Forest, using 5-fold cross validation on the training subset to reduce risk of over-fitting.
+
+```{r, eval=FALSE}
+# set training control for cross validation, 5 folds
+control = trainControl(method = "cv", number = 5)
+# train random forest model on training set using cross validation
+rf<-train(x = training[,vars],y=training$classe,method="rf", trControl=control)
+
+```
+
+
+The optimal model from the training had accuracy of 0.9999 within the training subset (see output below).
+
+```{r, echo=FALSE}
+rf
+```
+
+Despite near 100% accuracy, the importance of individual predictor variables was plotted, both to better understand model prediction and also to facilitate model simplification:
+```{r, eval=FALSE}
+# calculate and plot importance of variables based on cross validated model
+importance <- varImp(rf,scale=F)
+varImpPlot(rf$finalModel,n.var=15,main="importance of top 15 predictors")
+
+
+```
+
+```{r, echo=FALSE}
+varImpPlot(rf$finalModel,n.var=15,main="importance of top 15 predictors")
+
+```
+
+A step change in importance is visible after the top 1, 3 and 9 variables. Given that 2 of the top 3 variables are time related suggests high correlation between timing of data readings and the classification of the exercise type (classe variable) - this intuitively makes sense given high frequency of data sampling i.e. any randomly chosen "test" observation of the predictor variables will have been sampled at almost the same time as a "training" observation of known classe. Thus, classification of randomly selected observations is almost entirely predictable knowing only the time at whch the sample occured.
+
+### Final model
+
+Given high predictive importance, a new model was specified using only the top 3 predictors:
+
+```{r, eval=FALSE}
+#creaste list of variables in descending order of importance
+ranked_vars <- row.names(importance$importance[order(-importance$importance$Overall),0])
+#build model using top 3 predictors
+test <- train(x = training[,ranked_vars[1:3]],y=training$classe,method="rf", trControl=control)
+```
+
+The final model based on the top 3 predictors outlined above resulted in an in sample accuracy of 0.9998 (less than 0.0001 reduction in accuracy compared to fully specified model).
+
+```{r, echo=FALSE}
+print(test)
+```
+### Out-of-sample validation
+
+As a final check for over-fitting, and as an additional estimate of out-of sample error, the reduced model was fitted to the test subset created at the beginning of the exercise, and the confusion matrix calculated (see below). Overall accuracy on the pseudo out of sample data was 0.9912, which could suggest very minor (bordering on negligible) over-fitting.
+
+```{r, eval =FALSE}
+# predict classes on testing subset
+preds <- predict(test, newdata = as.data.frame(testing[,ranked_vars[1:3]]))
+# check accuarcy of predictions
+cf<-confusionMatrix(preds,testing$classe)
+cf
+```
+
+
+```{r, echo=FALSE}
+print(cf)
+```
+
+### Test-set predictions
+After validation against the pseudo out-of-sample data, the 3 predictor model was applied to the 20 test observations supplied
+
+```{r}
+# calculate predictions for the assessment test set
+predsT <- predict(test,newdata = pml.testing[,ranked_vars[1:3]])
+as.data.frame(predsT)
+```
+
