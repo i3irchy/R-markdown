@@ -17,6 +17,10 @@ output: html_document
 
 The objective of the assignemnt was to create a model to correctly identify the manner in which 6 test subjects completed dumbell lifts, by classifying the activity into one of 6 classes (1 correct class, and 5 distinct classes for common mistakes). 
 
+**Note that it is assumed for the purspose of this exercise that ALL variables in the training and test set may be used to estimate the out of sample classification. This includes the timing variables for each observation as well as the test subject.**
+
+Data source: 
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
 
 ### Initial variable inspection
 
